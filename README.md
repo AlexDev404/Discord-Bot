@@ -3,5 +3,7 @@ Chatbot for Discord Built in Python3 based off of uDiscordAPI and [datenhahn/pyt
 
 ## To Run
 
-`> pip install python-aiml`
-`> python3 chatbot.py`
+```shell
+> pip install python-aiml
+> python3 chatbot.py
+```
