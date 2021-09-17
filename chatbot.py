@@ -6,23 +6,27 @@ import time
 import os
 import aiml
 
-user_ID = 882679629905805364
-embedMode = True
+embedMode = False
 botname = "Bob Bot"
 customColor = 0x001627  # Set to False if you want to use random values. Can use hex colors such as #001627 but instead
-                        # of using a # use 0x in replacement of it
+prefixed = False
+lastresponse = " "
 
 
-def retMode():
-    if embedMode:
+# of using a # use 0x in replacement of it
+
+
+def retMode(mode):
+    if mode:
         return "ON"
     else:
         return "OFF"
 
 
-print("SIGN INTO ALICEBOT")
-print("EMBED MODE IS " + str(retMode()))
-authToken = input("ENTER DISCORD PERSONAL ACCESS TOKEN: ")
+print("SIGN-IN TO ALICEBOT")
+print("EMBED MODE IS " + str(retMode(embedMode)))
+print("PREFIX MODE IS " + str(retMode(prefixed)))
+authToken = input("ENTER DISCORD PERSONAL ACCESS TOKEN (Precede token with `Bot` if using a bot token): ")
 if not authToken:
     print("SERVER: NO TOKEN: UNAUTHORIZED")
     exit(-1)
@@ -87,14 +91,40 @@ print("OUTPUT URL:" + url)
 url_req = "".join(url_base + url_id + "/messages?limit=1")
 print("INPUT URL: " + url_req)
 
+url_getUser = "https://discord.com/api/v9/users/@me"
+
 
 # Use the 'headers' parameter to set the HTTPS headers:
 # bodyjson = json.dumps(genBody())
 
 # print(bodyjson) -- DEBUG
 
+
+def getUser():
+    res = requests.get(url_getUser, data=None, headers=headers_)
+    resjson = json.loads(res.text)
+
+    try:
+        print("SERVER: " + resjson["message"])
+        try:
+            print(" - RETRY AFTER: " + str(resjson["retry_after"]) + "s\n")
+        except KeyError:
+            pass
+    except KeyError:
+        pass
+
+    # print(resjson["id"])
+    return int(resjson["id"])
+
+
 def sendMessage(message):
     bodyjson = json.dumps(genBody(message, "false"))
+    ubodyjson = json.loads(bodyjson)
+
+    # Don't let the bot reply to itself
+    global lastresponse
+    lastresponse = ubodyjson["content"]
+    print(ubodyjson["content"])
     res = requests.post(url, data=bodyjson, headers=headers_)
     resjson = json.loads(res.text)
 
@@ -113,18 +143,18 @@ def sendMessage(message):
 
     # print(bodyjson)
     # print(resjson)
-    time.sleep(0.05)
+    # time.sleep(0.05)
 
 
 def reqMessage():
     res = requests.get(url_req, data=None, headers=headers_)
     uresjson = json.loads(res.text)
-    resjson = json.dumps(uresjson, indent=3)
+    # resjson = json.dumps(uresjson, indent=3)
 
     try:
-        print("SERVER: " + resjson["message"])
+        print("SERVER: " + uresjson["message"])
         try:
-            print(" - RETRY AFTER: " + str(resjson["retry_after"]) + "s\n")
+            print(" - RETRY AFTER: " + str(uresjson["retry_after"]) + "s\n")
         except KeyError:
             pass
         except TypeError:
@@ -132,12 +162,18 @@ def reqMessage():
     except TypeError:
         x = 0
         while x < len(uresjson):
-            if f"<@!{user_ID}>" in uresjson[x]["content"]:
-                # print("AHA!")
-                # print(uresjson[x]["content"])
+            if prefixed:
+                if f"<@!{user_ID}>" in uresjson[x]["content"]:
+                    # print("AHA!")
+                    # print(uresjson[x]["content"])
+                    inputtext = uresjson[x]["content"]
+                    return inputtext
+            else:
+                # print(uresjson)
                 inputtext = uresjson[x]["content"]
                 return inputtext
             x = x + 1
+
     except KeyError:
         print("Seems that the bot has become disconnected. Shutting down...")
         return -1
@@ -157,11 +193,13 @@ k = aiml.Kernel()
 if os.path.exists(BRAIN_FILE):
     print("Loading from brain file: " + BRAIN_FILE)
     k.loadBrain(BRAIN_FILE)
+    print("Waiting for user input...")
 else:
     print("Parsing aiml files")
     k.bootstrap(learnFiles="std-startup.aiml", commands="load aiml b")
     print("Saving brain file: " + BRAIN_FILE)
     k.saveBrain(BRAIN_FILE)
+    print("Waiting for user input...")
 
 
 # Endless loop which passes the input to the bot and prints
@@ -169,25 +207,45 @@ else:
 
 
 def main():
-    print("IN MAIN")
-    print(f"USERID = {user_ID}")
+    # https://discord.com/api/v9/users/@me
+    global user_ID
+    user_ID = None
+
+    if user_ID is not None:
+        pass
+    else:
+        user_ID = int(getUser())
+
+    # print("IN MAIN")
+    # print(f"USERID = {user_ID}")
 
     # input_text = input("> ")
     botInput = reqMessage()
 
     # IF THE BOT IS NOT SUMMONED DO NOT RUN
 
-    if botInput is None:
-        print("Waiting...")
+    if botInput is "" or botInput is None or botInput == lastresponse:
+        # pass
+        # print("Waiting...")
         # Don't want to get banned from Discord for overwhelming their API for _Obvious_ reasons...
         time.sleep(5)
     else:
-        if f"<@!{user_ID}>" in botInput:
-            botInput = botInput.replace(f"<@!{user_ID}>", '')
+        if prefixed:
+            if f"<@!{user_ID}>" in botInput:
+                botInput = botInput.replace(f"<@!{user_ID}>", '')
+                print(f"User says: {botInput}")
+                response = k.respond(str(botInput))
+                print(f"BOT SAYS: " + response)
+                sendMessage(response)
+                print("Waiting for user input...")
+                time.sleep(7.5)
+        else:
             print(f"User says: {botInput}")
             response = k.respond(str(botInput))
             print(f"BOT SAYS: " + response)
             sendMessage(response)
+            print("Waiting for user input...")
+            time.sleep(7.5)
 
     # KEEP CHECKIN'...
 
@@ -195,5 +253,6 @@ def main():
 
 
 # KEEP CHECKIN'...
+
 
 main()
